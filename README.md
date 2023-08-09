@@ -1,7 +1,5 @@
 # Solar-power-system-coverage-prediction
 
-This repository contains R code for predicting solar system coverage based on the deep solar dataset. The code utilizes various classification algorithms, including logistic regression, decision trees, and random forests, to analyze patterns and provide insights into solar system adoption.
-
 **Introduction:**
 
 The demand for renewable energy has led to increased attention on photovoltaic technology as it provides an environmentally-friendly way of generating power. Adopting efficient solar power systems can positively impact the environment and regional economic growth. This report aims to analyze the performance of different machine learning algorithms for classifying the potential of solar energy generation based on various features. The study compares the effectiveness of logistic regression, classification tree, and random forest algorithms, and also evaluates the impact of tuning hyper parameters in improving their performance.
