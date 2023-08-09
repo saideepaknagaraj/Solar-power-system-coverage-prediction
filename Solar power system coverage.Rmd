@@ -1,0 +1,154 @@
+---
+title: "STAT_ML_Assignment3"
+author: "Divya Halliyavar (22201765)"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
+```
+
+```{r}
+#including the required library
+library(ROCR)
+library(rpart)
+library(partykit)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+```
+
+
+```{r}
+#loading dataset and displaying first few rows
+load("data_hw3_deepsolar.RData")
+# Convert the target variable to a factor
+data$solar_system_coverage <- ifelse(data$solar_system_coverage == "high", 1, 0)
+data$solar_system_coverage <-factor(data$solar_system_coverage)
+table(data$solar_system_coverage)
+```
+
+```{r}
+#checking if there are any null values in the dataset
+sum(is.na(data))
+```
+
+```{r}
+set.seed(202301) # to reproduce this example
+# set aside test data
+N <- nrow(data)
+test <- sample(1:N, N*0.2)
+data_test <- data[test,]
+# select data for training and validation
+train <- setdiff(1:N, test)
+data_train <- data[train,]
+N_train <- nrow(data_train)
+```
+```{r}
+#Fitting the logistic model
+logit_model <- glm(solar_system_coverage ~ ., data = data_train, family = binomial)
+```
+
+```{r}
+#Predicting using fitted model
+pred_obj <- prediction(fitted(logit_model), data_train$solar_system_coverage)
+#ROC curve to evaluate the performance of the model 
+roc <- performance(pred_obj, "tpr", "fpr")
+plot(roc)
+abline(0, 1, col = "darkorange2", lty = 2) # add bisect line
+# compute the area under the ROC curve
+auc <- performance(pred_obj, "auc")
+auc@y.values
+#Tuning tau- selecting optimal value of tau according to ROC curve
+sens <- performance(pred_obj, "sens")
+spec <- performance(pred_obj, "spec")
+tau <- sens@x.values[[1]]
+sens_spec <- sens@y.values[[1]] + spec@y.values[[1]]
+best_roc <- which.max(sens_spec)
+#plot of ROC curve
+plot(tau, sens_spec, type = "l")
+points(tau[best_roc], sens_spec[best_roc], pch = 19, col = adjustcolor("darkorange2", 0.5))
+cat("optimal tau according to ROC curve:",tau[best_roc],"\n") # optimal tau according to the ROC curve
+```
+
+
+
+```{r}
+# we use this function to compute classification accuracy
+class_acc <- function(y, yhat) {
+tab <- table(y, yhat)
+return( sum(diag(tab))/sum(tab) )
+}
+```
+
+```{r}
+classifiers <- c("log_reg", "class_tree", "random_forest")
+
+K <- 5 # set number of folds
+R <- 5 # set number of replicates --- NOTE : could be slow
+out <- vector("list", R) # store accuracy output
+# out is a list, each slot of this list will contain a matrix where each column
+# corresponds to the accuracy of each classifier in the K folds
+
+for ( r in 1:R ) {
+acc <- matrix(NA, K, 3) # accuracy of the classifiers in the K folds
+folds <- rep( 1:K, ceiling(N_train/K) )
+folds <- sample(folds) # random permute
+folds <- folds[1:N_train] # ensure we got N_train data points
+for ( k in 1:K ) {
+train_fold <- which(folds != k)
+validation <- setdiff(1:N_train, train_fold)
+# fit classifiers on the training data
+#
+# logistic regression
+fit_log_1 <- glm(solar_system_coverage ~ ., data = data_train,subset = train_fold,family = binomial)
+
+# decision tree
+fit_ct_1 <- rpart(solar_system_coverage ~ ., data = data_train,subset = train_fold)
+#
+# random forest
+fit_rf <- randomForest(solar_system_coverage ~ ., data = data_train, subset = train_fold, importance = TRUE)
+
+# predict the classification of the validation data observations in the dropped fold
+#
+#
+# logistic regression
+pred_log_1 <- predict(fit_log_1, type = "response", newdata = data_train[validation,])
+pred_log_1 <- ifelse(pred_log_1 > tau[best_roc], 1, 0)
+acc[k,1] <- class_acc(pred_log_1, data_train$solar_system_coverage[validation])
+
+# classification tree
+pred_ct_1 <- predict(fit_ct_1, type = "class", newdata = data_train[validation,])
+acc[k,2] <- class_acc(pred_ct_1, data_train$solar_system_coverage[validation])
+
+#random forest
+pred_rf <- predict(fit_rf, newdata = data_train[validation,], type = "class")
+acc[k,3] <- class_acc(pred_rf, data_train$solar_system_coverage[validation])
+
+}
+out[[r]] <- acc
+# print(r) # print iteration number
+
+}
+```
+
+```{r}
+avg <- t( sapply(out, colMeans) )
+head(avg, 3)
+```
+```{r}
+mean_acc <- colMeans(avg) # estimated mean accuracy
+mean_acc
+```
+```{r}
+sd_acc <- apply(avg, 2, sd)/sqrt(R) # estimated mean accuracy standard deviation
+sd_acc
+```
+```{r}
+#plot
+mat <- data.frame( avg = c(avg), classifiers = rep(classifiers, each = R) )
+boxplot(avg ~ classifiers, mat)
+```
+
+
